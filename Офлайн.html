@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Merge Alchemy: ULTRA Hardcore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            touch-action: none;
+            overflow: hidden;
+            background-color: #020617;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: white;
+        }
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-board {
+            position: relative;
+            width: 95vw;
+            max-width: 500px;
+            height: 45vh;
+            background: radial-gradient(circle, #0f172a 0%, #020617 100%);
+            border: 2px solid #1e293b;
+            border-radius: 24px;
+            margin-top: 10px;
+            overflow: hidden;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
+        }
+        .item {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            cursor: grab;
+            user-select: none;
+            z-index: 10;
+            transition: transform 0.1s;
+        }
+        .item:active { transform: scale(1.1); }
+        .xp-bar-container {
+            width: 100%;
+            height: 8px;
+            background: #1e293b;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
+        }
+        .xp-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .panel {
+            position: fixed;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.98);
+            z-index: 100;
+            padding: 2rem;
+            display: none;
+            flex-direction: column;
+        }
+        .panel.active { display: flex; }
+        .zone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            opacity: 0.4;
+            transition: all 0.2s;
+        }
+        .zone.active { opacity: 1; background: rgba(255,255,255,0.1); }
+        
+        @keyframes pulse-gold {
+            0% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.6); transform: scale(1); }
+            50% { box-shadow: 0 0 0 10px rgba(234, 179, 8, 0); transform: scale(1.05); }
+            100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0); transform: scale(1); }
+        }
+        .emergency-active {
+            animation: pulse-gold 1.5s infinite;
+            border-color: #eab308 !important;
+            background-color: #422006 !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <div class="w-full max-w-md px-4 pt-6 flex flex-col gap-1">
+        <div class="flex justify-between items-start">
+            <div>
+                <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Баланс (Хардкор)</p>
+                <div class="flex items-center gap-2">
+                    <span class="text-3xl font-black text-yellow-500" id="coins">0</span>
+                    <span class="text-sm text-slate-400">🪙</span>
+                </div>
+                <p class="text-[11px] text-green-400 font-bold" id="rub-convert">≈ 0.00 руб.</p>
+            </div>
+            <div class="flex gap-1.5">
+                <button id="add-coins-btn" onclick="getEmergencyGrant()" title="Помощь инвестора (на 2 предмета)" class="bg-slate-800 border border-slate-700 p-2 rounded-xl text-lg transition-all">
+                    ➕
+                </button>
+                <button onclick="togglePanel('quests')" class="bg-slate-800 p-2 border border-slate-700 rounded-xl relative">
+                    📜 <span id="q-badge" class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full hidden"></span>
+                </button>
+                <button onclick="togglePanel('storage')" class="bg-slate-800 p-2 border border-slate-700 rounded-xl">📦</button>
+                <button onclick="togglePanel('withdraw')" class="bg-indigo-900/50 border border-indigo-500/30 p-2 rounded-xl">💸</button>
+            </div>
+        </div>
+        
+        <div class="xp-bar-container mt-4">
+            <div id="xp-fill" class="xp-bar-fill"></div>
+        </div>
+        <div class="flex justify-between text-[9px] text-slate-500 font-black uppercase mt-1">
+            <span id="lvl-txt" class="text-indigo-400">УР. 1</span>
+            <span id="xp-txt">XP: 0/10000</span>
+        </div>
+    </div>
+
+    <div id="game-board">
+        <div class="absolute bottom-0 left-0 right-0 h-16 flex border-t border-white/5 pointer-events-none">
+            <div id="sell-zone" class="zone text-red-500">ПРОДАТЬ ♻️</div>
+            <div id="storage-zone" class="zone text-blue-500">СКЛАД 📦</div>
+        </div>
+    </div>
+
+    <div class="w-full max-w-md p-6 flex flex-col gap-3">
+        <button id="spawn-btn" class="w-full bg-indigo-600 py-5 rounded-3xl font-black text-xl shadow-[0_4px_0_rgb(49,46,129)] active:translate-y-1 active:shadow-none transition-all uppercase">
+            ПРИЗВАТЬ <span class="text-indigo-300 ml-2 text-sm" id="price-txt">5 🪙</span>
+        </button>
+        <div class="flex justify-around text-[10px] font-black text-slate-500 uppercase">
+            <span id="stat-merges">Слияний: 0</span>
+            <span id="stat-discovered">Открыто: 1/50</span>
+        </div>
+    </div>
+</div>
+
+<!-- Panels -->
+<div id="panel-quests" class="panel">
+    <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-black text-yellow-500">КОНТРАКТЫ</h2><button onclick="togglePanel('quests')" class="text-2xl">✕</button></div>
+    <div id="quests-list" class="space-y-4 overflow-y-auto pr-2"></div>
+</div>
+
+<div id="panel-storage" class="panel">
+    <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-black text-blue-400">СКЛАД</h2><button onclick="togglePanel('storage')" class="text-2xl">✕</button></div>
+    <div id="storage-grid" class="grid grid-cols-4 gap-3"></div>
+</div>
+
+<div id="panel-withdraw" class="panel">
+    <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-black text-green-500">ВЫВОД</h2><button onclick="togglePanel('withdraw')" class="text-2xl">✕</button></div>
+    <div class="bg-slate-900 p-6 rounded-3xl border border-slate-800 text-center">
+        <p class="text-slate-400 text-sm mb-2">Курс: 1000 🪙 = 1 рубль</p>
+        <div class="text-4xl font-black text-green-400 mb-6" id="wd-rub">0.00 ₽</div>
+        <button onclick="alert('Минималка для вывода: 500 рублей')" class="w-full bg-green-600 py-4 rounded-xl font-black uppercase">Вывести прибыль</button>
+    </div>
+</div>
+
+<div id="discovery-modal" class="fixed inset-0 bg-black/95 z-[200] hidden flex items-center justify-center p-8 text-center">
+    <div>
+        <p class="text-indigo-400 font-black tracking-widest uppercase mb-2 animate-bounce">Новая материя!</p>
+        <div id="new-emoji" class="text-9xl mb-4 drop-shadow-[0_0_30px_rgba(99,102,241,0.5)]"></div>
+        <h2 id="new-name" class="text-3xl font-black mb-8 uppercase text-white"></h2>
+        <button onclick="document.getElementById('discovery-modal').classList.add('hidden')" class="bg-white text-black px-12 py-4 rounded-full font-black uppercase">Продолжить</button>
+    </div>
+</div>
+
+<script>
+    const ITEM_TYPES = [
+        { emoji: '☁️', name: 'Пар', buy: 5 }, { emoji: '💧', name: 'Капля', buy: 15 },
+        { emoji: '🌿', name: 'Росток', buy: 40 }, { emoji: '🔥', name: 'Искра', buy: 120 },
+        { emoji: '💎', name: 'Осколок', buy: 300 }, { emoji: '⚡', name: 'Заряд', buy: 800 },
+        { emoji: '🌪️', name: 'Вихрь', buy: 2000 }, { emoji: '🌋', name: 'Магма', buy: 5000 },
+        { emoji: '🌀', name: 'Эфир', buy: 12000 }, { emoji: '🧬', name: 'Клетка', buy: 30000 }
+    ];
+    for(let i=10; i<50; i++) {
+        ITEM_TYPES.push({ emoji: '💠', name: 'Материя ' + (i+1), buy: Math.floor(ITEM_TYPES[i-1].buy * 2.8) });
+    }
+
+    let state = {
+        coins: 15,
+        xp: 0,
+        level: 1,
+        items: [],
+        storage: [],
+        discovered: [0],
+        totalMerges: 0,
+        quests: []
+    };
+
+    let dragData = null;
+
+    function init() {
+        const saved = localStorage.getItem('hc_alchemy_ultra_v5');
+        if (saved) state = JSON.parse(saved);
+        if (!state.quests || state.quests.length === 0) generateQuests();
+        
+        renderBoard();
+        updateUI();
+        setInterval(save, 5000);
+        
+        document.getElementById('spawn-btn').onclick = spawn;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, {passive: false});
+        document.addEventListener('mouseup', onEnd);
+        document.addEventListener('touchend', onEnd);
+    }
+
+    function getEmergencyGrant() {
+        const costPerItem = getSpawnCost();
+        const costForTwo = costPerItem * 64;
+        
+        // ТЕПЕРЬ ЧЕСТНОЕ ДОБАВЛЕНИЕ: просто прибавляем стоимость 2-х предметов к текущему балансу
+        // если баланса не хватает на покупку 2-х штук.
+        if (state.coins < costForTwo) {
+            state.coins += costForTwo; // Добавляем полную порцию монет
+            
+            const btn = document.getElementById('add-coins-btn');
+            btn.classList.add('bg-yellow-500');
+            setTimeout(() => btn.classList.remove('bg-yellow-500'), 200);
+            updateUI();
+        } else {
+            const btn = document.getElementById('add-coins-btn');
+            btn.classList.add('bg-red-900');
+            setTimeout(() => btn.classList.remove('bg-red-900'), 200);
+        }
+    }
+
+    function getSpawnCost() {
+        return Math.floor(5 * Math.pow(1.5, state.level - 1));
+    }
+
+    function getLevelReq(lvl) {
+        return 10000 * Math.pow(6, lvl - 1);
+    }
+
+    function spawn() {
+        const cost = getSpawnCost();
+        if (state.coins >= cost) {
+            state.coins -= cost;
+            createItem(0);
+            updateUI();
+        }
+    }
+
+    function createItem(lvl, x, y) {
+        const board = document.getElementById('game-board').getBoundingClientRect();
+        const item = {
+            id: 'i' + Math.random().toString(36).substr(2, 5),
+            level: lvl,
+            x: x ?? (Math.random() * (board.width - 60)),
+            y: y ?? (Math.random() * (board.height - 120))
+        };
+        state.items.push(item);
+        renderItem(item);
+    }
+
+    function renderItem(item) {
+        const el = document.createElement('div');
+        el.className = 'item';
+        el.id = item.id;
+        el.innerHTML = state.discovered.includes(item.level) ? ITEM_TYPES[item.level].emoji : '❓';
+        el.style.left = item.x + 'px';
+        el.style.top = item.y + 'px';
+        
+        const start = (e) => {
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const cy = e.touches ? e.touches[0].clientY : e.clientY;
+            const r = el.getBoundingClientRect();
+            dragData = { el, item, ox: cx - r.left, oy: cy - r.top };
+            el.style.zIndex = 100;
+        };
+        el.onmousedown = start;
+        el.ontouchstart = start;
+        document.getElementById('game-board').appendChild(el);
+    }
+
+    function onMove(e) {
+        if (!dragData) return;
+        if(e.cancelable) e.preventDefault();
+        const cx = e.touches ? e.touches[0].clientX : e.clientX;
+        const cy = e.touches ? e.touches[0].clientY : e.clientY;
+        const board = document.getElementById('game-board').getBoundingClientRect();
+        
+        let nx = cx - board.left - dragData.ox;
+        let ny = cy - board.top - dragData.oy;
+        
+        nx = Math.max(0, Math.min(nx, board.width - 60));
+        ny = Math.max(0, Math.min(ny, board.height - 60));
+
+        dragData.el.style.left = nx + 'px';
+        dragData.el.style.top = ny + 'px';
+        dragData.item.x = nx;
+        dragData.item.y = ny;
+
+        const isLow = ny > board.height - 80;
+        document.getElementById('sell-zone').classList.toggle('active', isLow && nx < board.width/2);
+        document.getElementById('storage-zone').classList.toggle('active', isLow && nx >= board.width/2);
+    }
+
+    function onEnd() {
+        if (!dragData) return;
+        const board = document.getElementById('game-board').getBoundingClientRect();
+        const it = dragData.item;
+
+        if (it.y > board.height - 80) {
+            if (it.x < board.width / 2) {
+                state.items = state.items.filter(i => i.id !== it.id);
+                dragData.el.remove();
+                state.coins += Math.floor(ITEM_TYPES[it.level].buy * 0.1); 
+            } else {
+                if (state.storage.length < 16) {
+                    state.items = state.items.filter(i => i.id !== it.id);
+                    dragData.el.remove();
+                    state.storage.push(it.level);
+                    renderStorage();
+                }
+            }
+        } else {
+            const target = state.items.find(i => i.id !== it.id && i.level === it.level && Math.hypot(i.x - it.x, i.y - it.y) < 35);
+            if (target) merge(it, target);
+        }
+        dragData = null;
+        updateUI();
+    }
+
+    function merge(i1, i2) {
+        const next = i1.level + 1;
+        if (next >= ITEM_TYPES.length) return;
+
+        state.items = state.items.filter(i => i.id !== i1.id && i.id !== i2.id);
+        document.getElementById(i1.id).remove();
+        document.getElementById(i2.id).remove();
+
+        state.coins += 1; 
+        state.xp += 100 * (i1.level + 1);
+        state.totalMerges++;
+        
+        trackQuests('merge');
+
+        if (!state.discovered.includes(next)) {
+            state.discovered.push(next);
+            showDiscovery(next);
+        }
+
+        createItem(next, i2.x, i2.y);
+        checkLvl();
+    }
+
+    function checkLvl() {
+        const req = getLevelReq(state.level);
+        if (state.xp >= req) {
+            state.xp -= req;
+            state.level++;
+            generateQuests();
+        }
+    }
+
+    function updateUI() {
+        const costPerItem = getSpawnCost();
+        document.getElementById('coins').innerText = Math.floor(state.coins).toLocaleString();
+        document.getElementById('rub-convert').innerText = `≈ ${(state.coins / 1000).toFixed(2)} руб.`;
+        document.getElementById('wd-rub').innerText = `${(state.coins / 1000).toFixed(2)} ₽`;
+        document.getElementById('lvl-txt').innerText = `УР. ${state.level}`;
+        document.getElementById('stat-merges').innerText = `Слияний: ${state.totalMerges}`;
+        document.getElementById('stat-discovered').innerText = `Открыто: ${state.discovered.length}/50`;
+        
+        const req = getLevelReq(state.level);
+        document.getElementById('xp-fill').style.width = (state.xp / req * 100) + '%';
+        document.getElementById('xp-txt').innerText = `XP: ${Math.floor(state.xp).toLocaleString()} / ${Math.floor(req).toLocaleString()}`;
+        document.getElementById('price-txt').innerText = `${costPerItem} 🪙`;
+        
+        const levelsOnBoard = state.items.map(i => i.level);
+        const hasMergeAvailable = new Set(levelsOnBoard).size !== levelsOnBoard.length;
+        const addBtn = document.getElementById('add-coins-btn');
+        
+        if (state.coins < costPerItem && !hasMergeAvailable && state.storage.length === 0) {
+            addBtn.classList.add('emergency-active');
+        } else {
+            addBtn.classList.remove('emergency-active');
+        }
+    }
+
+    function showDiscovery(lvl) {
+        const d = ITEM_TYPES[lvl];
+        document.getElementById('new-emoji').innerText = d.emoji;
+        document.getElementById('new-name').innerText = d.name;
+        document.getElementById('discovery-modal').classList.remove('hidden');
+    }
+
+    function togglePanel(id) {
+        document.querySelectorAll('.panel').forEach(p => {
+            if (p.id !== 'panel-' + id) p.classList.remove('active');
+        });
+        document.getElementById('panel-' + id).classList.toggle('active');
+        if (id === 'quests') document.getElementById('q-badge').classList.add('hidden');
+        if (id === 'storage') renderStorage();
+    }
+
+    function renderStorage() {
+        const grid = document.getElementById('storage-grid');
+        grid.innerHTML = '';
+        for(let i=0; i<16; i++) {
+            const lvl = state.storage[i];
+            const slot = document.createElement('div');
+            slot.className = `h-16 rounded-2xl border-2 border-slate-800 bg-slate-900 flex items-center justify-center text-3xl shadow-inner cursor-pointer active:scale-90 transition-transform`;
+            if (lvl !== undefined) {
+                slot.innerText = ITEM_TYPES[lvl].emoji;
+                slot.onclick = () => {
+                    state.storage.splice(i, 1);
+                    createItem(lvl);
+                    renderStorage();
+                    togglePanel('storage');
+                };
+            }
+            grid.appendChild(slot);
+        }
+    }
+
+    function generateQuests() {
+        state.quests = [
+            { id: Date.now(), type: 'merge', goal: state.level * 10, current: 0, reward: Math.floor(getSpawnCost() * 5), text: 'Контракт на слияния' },
+            { id: Date.now()+1, type: 'merge', goal: state.level * 25, current: 0, reward: Math.floor(getSpawnCost() * 15), text: 'Титанический труд' }
+        ];
+        renderQuests();
+    }
+
+    function trackQuests(type) {
+        let anyDone = false;
+        state.quests.forEach(q => {
+            if (q.type === type && q.current < q.goal) {
+                q.current++;
+                if (q.current === q.goal) {
+                    state.coins += q.reward;
+                    anyDone = true;
+                }
+            }
+        });
+        if (anyDone) {
+            document.getElementById('q-badge').classList.remove('hidden');
+            updateUI();
+        }
+        renderQuests();
+    }
+
+    function renderQuests() {
+        const list = document.getElementById('quests-list');
+        list.innerHTML = '';
+        state.quests.forEach(q => {
+            const prg = Math.min((q.current / q.goal) * 100, 100);
+            const isDone = q.current >= q.goal;
+            list.innerHTML += `
+                <div class="bg-slate-900 p-5 rounded-3xl border ${isDone ? 'border-green-500/40 bg-green-950/10' : 'border-slate-800'}">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="font-bold ${isDone ? 'text-green-400' : 'text-slate-300'} text-xs">${q.text}</span>
+                        <span class="bg-yellow-500/10 text-yellow-500 px-3 py-1 rounded-full text-[10px] font-black">+${q.reward.toLocaleString()} 🪙</span>
+                    </div>
+                    <div class="h-2 bg-black rounded-full overflow-hidden">
+                        <div class="h-full rounded-full ${isDone ? 'bg-green-500' : 'bg-indigo-500'}" style="width:${prg}%"></div>
+                    </div>
+                    <div class="flex justify-between mt-2 text-[9px] font-bold text-slate-500">
+                        <span>${q.current} / ${q.goal}</span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function renderBoard() {
+        document.querySelectorAll('.item').forEach(e => e.remove());
+        state.items.forEach(renderItem);
+    }
+
+    function save() { localStorage.setItem('hc_alchemy_ultra_v5', JSON.stringify(state)); }
+    window.onload = init;
+</script>
+
+</body>
+</html>
+
